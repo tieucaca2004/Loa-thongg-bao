@@ -46,8 +46,15 @@ async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 480,
     height: 640,
+    icon: join(__dirname, 'renderer', 'icon.png'),
     webPreferences: {
-      preload: join(__dirname, 'preload.js'),
+      // .cjs, not .js: Electron's preload loader requires CommonJS, but this
+      // package is "type": "module" so a plain .js here would be loaded as
+      // ESM and fail with "Cannot use import statement outside a module"
+      // (found via a real headless Electron run under Xvfb during Phase 11
+      // Windows-acceptance prep — see tsconfig.preload.json, which compiles
+      // just this one file to CommonJS).
+      preload: join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
     },

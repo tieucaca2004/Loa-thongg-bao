@@ -6,5 +6,9 @@ build/
 .env.local
 backend/data/*.sqlite
 backend/data/*.sqlite-journal
+backend/data/*.sqlite-wal
+backend/data/*.sqlite-shm
 coverage/
 .DS_Store
+release/
+dist-preload/
