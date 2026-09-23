@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>A TIEU PAYMENT</title>
+  <style>
+    body { font-family: -apple-system, Segoe UI, Arial, sans-serif; margin: 0; padding: 16px; background: #111; color: #eee; }
+    h1 { font-size: 18px; letter-spacing: 1px; }
+    #status { font-weight: bold; margin-bottom: 12px; }
+    .connected { color: #4caf50; }
+    .connecting { color: #ffc107; }
+    .disconnected { color: #f44336; }
+    #latest { background: #1e1e1e; border-radius: 8px; padding: 12px; margin-bottom: 16px; }
+    #latest .amount { font-size: 28px; font-weight: bold; }
+    #latest .content { color: #aaa; margin-top: 4px; }
+    #latest .time { color: #666; font-size: 12px; margin-top: 8px; }
+    #announce-state { margin-top: 8px; }
+    ul#history { list-style: none; padding: 0; margin: 0; max-height: 220px; overflow-y: auto; }
+    ul#history li { padding: 8px; border-bottom: 1px solid #2a2a2a; font-size: 13px; }
+    .controls { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .controls label { font-size: 12px; color: #aaa; }
+    button { padding: 8px; border-radius: 6px; border: none; background: #333; color: #eee; cursor: pointer; }
+    button:hover { background: #444; }
+    #errors { color: #f44336; font-size: 12px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>A TIEU PAYMENT</h1>
+  <div id="status" class="disconnected">🔴 DISCONNECTED</div>
+
+  <div id="latest" style="display:none">
+    <div>Giao dịch mới:</div>
+    <div class="amount" id="latest-amount"></div>
+    <div>Nội dung:</div>
+    <div class="content" id="latest-content"></div>
+    <div class="time" id="latest-time"></div>
+    <div id="announce-state"></div>
+  </div>
+
+  <div>Lịch sử giao dịch gần nhất:</div>
+  <ul id="history"></ul>
+
+  <div id="errors"></div>
+
+  <div class="controls">
+    <label for="volume">Âm lượng</label>
+    <input type="range" id="volume" min="0" max="100" value="80" />
+
+    <label for="voice">Giọng đọc</label>
+    <select id="voice"></select>
+
+    <button id="test-speaker">🔊 Test Speaker</button>
+    <button id="test-tts">🗣 Test TTS</button>
+    <button id="retry">🔁 Phát lại thông báo lỗi</button>
+  </div>
+
+  <script src="./renderer.js"></script>
+</body>
+</html>
