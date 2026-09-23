@@ -8,7 +8,7 @@ simulation, but this checklist's own gate is real-hardware PASS, which is
 still open). States below are factual PASS/FAIL/NOT TESTED only — nothing
 here is upgraded to "ready" without evidence.
 
-Last updated: 2026-09-23 (Phase 11).
+Last updated: 2026-09-23 (Phase 12).
 
 ## Backend
 
@@ -55,9 +55,24 @@ Last updated: 2026-09-23 (Phase 11).
 - [ ] Windows NSIS installer (.exe) PASS — **NOT TESTED**. The final NSIS
       packaging step requires `wine` on Linux; this container has none
       and `apt-get install wine64` failed on unrelated package-mirror
-      404s (not a project blocker, an environment one). Must be run
-      either on real Windows or a Linux machine with wine installed.
-      See `docs/WINDOWS_ACCEPTANCE_RESULTS.md`.
+      404s (not a project blocker, an environment one). Re-confirmed in
+      Phase 12: same failure point, packaging config now also excludes
+      source maps and test files, sets a stable artifact name
+      (`A-Tieu-Payment-Setup.exe`), and `perMachine: false` is explicit
+      (no admin required). Must be run either on real Windows or a Linux
+      machine with wine installed. See `docs/WINDOWS_ACCEPTANCE_RESULTS.md`.
+- [x] preload regression guard PASS (Phase 12) — `desktop/src/__tests__/preloadBuild.test.ts`
+      runs a real build and asserts `dist/preload.cjs` exists as
+      CommonJS and `dist/preload.js` does not, so the ESM/CJS defect
+      found in Phase 11 cannot silently regress. Verified to actually
+      catch the regression (temporarily reverted the fix, confirmed the
+      test fails, restored the fix, confirmed it passes again).
+- [x] data safety PASS (Phase 12) — reviewed all desktop source: no
+      password/secret/apiKey/OTP/PIN strings anywhere in `desktop/src/`;
+      `DesktopSettings` (the only thing persisted, under
+      `%APPDATA%\A Tieu Payment\settings.json`) contains exactly
+      `backendWsUrl`, `voice`, `volume`, `autoStart` — no credentials of
+      any kind. The webhook API key lives only in the backend's `.env`.
 - [ ] Windows SAPI PASS — **NOT TESTED** on real Windows (this container
       cannot run `powershell.exe`/SAPI; `WindowsSapiTtsEngine` falls back
       to a no-op on non-Windows so the rest of the app still runs/tests).
@@ -123,14 +138,16 @@ Last updated: 2026-09-23 (Phase 11).
    `backend/src/services/sepay/schema.ts` /
    `backend/src/services/sepay/normalize.ts` is confirmed or corrected
    against the real docs.
-2. `docs/WINDOWS_ACCEPTANCE.md` is run in full on a real Windows PC with
-   a physical speaker at (or representative of) the actual counter, and
-   every test row is updated to a real PASS/FAIL with evidence — see
-   `docs/WINDOWS_ACCEPTANCE_RESULTS.md` for what Phase 11 already ran
-   (Linux-only, pipeline-level) versus what still needs real hardware.
-   The NSIS `.exe` installer also needs to be produced (either on real
-   Windows or a Linux machine with `wine`) and tested for clean
-   install/uninstall.
+2. `docs/WINDOWS_TEST_GUIDE.md` (Phase 12's practical 24-step procedure,
+   an expanded version of `docs/WINDOWS_ACCEPTANCE.md`) is run in full on
+   a real Windows PC with a physical speaker at (or representative of)
+   the actual counter, using the `release/windows-test/` bundle (built
+   locally, not committed — see below), and every test row is updated to
+   a real PASS/FAIL with evidence — see `docs/WINDOWS_ACCEPTANCE_RESULTS.md`
+   for what Phase 11/12 already ran (Linux-only, pipeline-level) versus
+   what still needs real hardware. The NSIS `.exe` installer also needs
+   to be produced (either on real Windows or a Linux machine with
+   `wine`) and tested for clean install/uninstall.
 3. A production deployment target is chosen (hosting for the backend,
    HTTPS termination per `docs/SECURITY.md`) and its own environment
    variables are configured — none of this requires code changes, only
