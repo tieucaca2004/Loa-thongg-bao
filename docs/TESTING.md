@@ -3,7 +3,8 @@
 ## Automated tests
 
 ```
-cd backend && npm test     # 14 tests: webhook validation, auth, idempotency, health
+cd backend && npm test     # 26 tests: webhook validation, auth, idempotency, health,
+                            #           event-bus resilience, rate limiting, error handling, log redaction
 cd desktop && npm test     # 16 tests: number-to-words, formatter, announcement queue
 ```
 
@@ -20,6 +21,23 @@ cd desktop && npm test     # 16 tests: number-to-words, formatter, announcement 
   **simulated backend restart** (close + reopen the same SQLite file) still
   finds the previously stored transaction — proving Acceptance Test 6
   (backend restart, history not lost).
+- `eventBusResilience.test.ts` (Phase 9) — a throwing event subscriber
+  cannot propagate back through `publish()`, and cannot block other
+  subscribers from receiving the event. This is a real defect found and
+  fixed during Phase 9 hardening: reproduced first (see the commit that
+  added this test), then `PaymentEventBus.publish()` was changed to
+  isolate each subscriber in its own try/catch.
+- `hardening.test.ts` (Phase 9) — malformed JSON body → controlled 400
+  (not a stack trace) + a `webhook_logs` entry; unsupported content-type
+  rejected; `GET /webhooks/sepay` (wrong method) → 404; a simulated DB
+  failure (closed handle) → controlled 500, never a false `200 success`;
+  rate limiting: requests beyond the configured per-IP max get `429`,
+  `/health`/`/transactions` are never rate-limited, and a realistic
+  8-attempt SePay retry burst is never blocked by the default limit.
+- `logRedaction.test.ts` (Phase 9) — the logger's declared redact rules
+  actually remove an `Authorization` header value and `apiKey`/`secret`/
+  `SEPAY_WEBHOOK_API_KEY`-shaped fields from real log output (captured
+  from a live pino stream, not just eyeballing the config).
 
 ### Desktop (`desktop/src/__tests__/`)
 

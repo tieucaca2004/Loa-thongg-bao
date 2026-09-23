@@ -7,7 +7,7 @@
   "main": "dist/main.js",
   "scripts": {
     "dev": "tsx watch src/main.ts",
-    "build": "tsc -p tsconfig.json && cp src/renderer/index.html src/renderer/renderer.js dist/renderer/",
+    "build": "tsc -p tsconfig.json && mkdir -p dist/renderer && cp src/renderer/index.html src/renderer/renderer.js dist/renderer/",
     "start": "node dist/main.js",
     "test": "vitest run",
     "test:watch": "vitest"

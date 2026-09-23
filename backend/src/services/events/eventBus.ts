@@ -21,8 +21,25 @@ export class PaymentEventBus {
   private readonly emitter = new EventEmitter();
   private static readonly EVENT_NAME = 'payment_received';
 
+  /**
+   * Publishes to every subscriber. Each subscriber is invoked in isolation:
+   * one throwing (e.g. a broken WebSocket broadcast loop) must never
+   * prevent other subscribers from running, and must never propagate back
+   * to the webhook handler — the transaction was already persisted before
+   * publish() is called, so a subscriber failure here must not turn an
+   * already-successful write into a false 500 (Phase 9 hardening; see
+   * src/__tests__/eventBusResilience.test.ts for the reproduction).
+   */
   publish(event: PaymentReceivedEvent): void {
-    this.emitter.emit(PaymentEventBus.EVENT_NAME, event);
+    for (const listener of this.emitter.listeners(PaymentEventBus.EVENT_NAME)) {
+      try {
+        (listener as (e: PaymentReceivedEvent) => void)(event);
+      } catch {
+        // Intentionally swallowed: a subscriber's failure to consume the
+        // event must not affect transaction integrity or other subscribers.
+        // The transaction itself is already durably persisted by this point.
+      }
+    }
   }
 
   subscribe(listener: (event: PaymentReceivedEvent) => void): () => void {

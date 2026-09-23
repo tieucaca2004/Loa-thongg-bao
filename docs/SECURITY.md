@@ -53,9 +53,61 @@ confirmed from reachable docs.
   `GET /transactions` (read-only, normalized fields, no raw file access).
 - `raw_payload` is stored for reconciliation but contains no more than
   what SePay itself sent (no secrets are ever part of that payload).
-- Rate limiting: not yet implemented in V1 (the primary defense is API-key
-  auth + strict schema validation). Recommended before production:
-  `@fastify/rate-limit` on `/webhooks/sepay`, scoped by source IP.
+
+## Rate limiting (Phase 9)
+
+`POST /webhooks/sepay` is rate-limited per source IP via
+`@fastify/rate-limit`, configured only on that route (`global: false` —
+`/health` and `/transactions` are unlimited). Limits are configurable via
+`RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS` (default 60 requests/minute),
+generous enough that SePay's documented worst-case retry burst (up to 8
+delivery attempts for one transaction, see `docs/TECHNICAL_NOTES.md`) is
+never blocked — see `backend/src/__tests__/hardening.test.ts` for the
+proof (a simulated 8-attempt retry burst all return 200; a synthetic flood
+beyond the configured max gets `429`).
+
+Implementation note: the plugin must be registered before the route is
+declared, and the route declaration must be wrapped in `app.after()` so it
+runs once the (asynchronously booting) rate-limit plugin has actually
+attached its `onRoute` hook — otherwise the per-route `config.rateLimit`
+silently never takes effect. See the comment in `backend/src/app.ts`.
+
+## Structured error handling (Phase 9)
+
+A centralized Fastify error handler (`app.setErrorHandler`) ensures:
+- Malformed JSON / unsupported content-type / oversized bodies return a
+  controlled `400` (never a stack trace), and are recorded in
+  `webhook_logs` as `rejected_invalid` for reconciliation.
+- Any unexpected internal error (e.g. the database becomes unavailable)
+  returns a controlled `500 {"success": false, ...}` — never a false
+  `200 success`. The full error is logged server-side only.
+- `PaymentEventBus.publish()` isolates each subscriber: if the WebSocket
+  broadcast loop (or any other subscriber) throws, it cannot propagate
+  back into the webhook handler and turn an already-persisted transaction
+  into a false failure response, and it cannot block other subscribers
+  from receiving the event. See
+  `backend/src/__tests__/eventBusResilience.test.ts`.
+
+## Testing security-relevant behavior
+
+`backend/src/__tests__/hardening.test.ts` and `logRedaction.test.ts` cover:
+malformed JSON handling, unsupported content-type, method validation (404
+for undefined route+method combos), a simulated DB failure returning a
+controlled 5xx instead of false success, rate-limit enforcement (blocks
+once over the configured max) and non-interference with legitimate retry
+bursts, and that Authorization headers / apiKey / secret-shaped fields are
+never present in log output.
+
+## Database safety (Phase 9 review)
+
+- **WAL mode** is enabled (`backend/src/db/index.ts`, `db.pragma('journal_mode = WAL')`) — appropriate here since the backend is a single process with potentially concurrent readers (`GET /transactions`, `GET /health`) and one writer stream (the webhook route); WAL avoids writer-blocks-reader contention.
+- **Foreign keys** are enabled (`db.pragma('foreign_keys = ON')`) — no foreign-key relationships exist yet in the V1 schema, but this is on by default for when they're added.
+- **Transaction integrity**: every insert is a single `better-sqlite3` prepared statement (`INSERT OR IGNORE`), which SQLite executes atomically — no multi-statement transaction is needed for this write shape, and none was added just for its own sake, per project rule not to overengineer.
+- **`transaction_id` UNIQUE constraint** is the idempotency guarantee (see `docs/ARCHITECTURE.md`); confirmed unchanged in this phase — no schema migration was needed or made.
+- **Safe concurrent access**: `better-sqlite3` is synchronous and single-connection; combined with WAL mode this is safe for one backend process. Running multiple backend processes against the same SQLite file is **not supported** in V1 (would need a real DB server) — call this out explicitly if you ever scale beyond one instance.
+- **Graceful shutdown**: `backend/src/server.ts` closes the Fastify server and the SQLite handle on `SIGINT`/`SIGTERM` before exiting, so no write is left mid-flight.
+- **Database file location**: `backend/data/` (configurable via `DATABASE_PATH`), git-ignored, not served by any HTTP route.
+- **Backup strategy (recommendation, not yet automated)**: because WAL mode keeps uncommitted data in a separate `-wal` file, a plain file copy of the `.sqlite` file alone can miss recent writes. Use SQLite's own [online backup](https://www.sqlite.org/backup.html) (`sqlite3 payment-engine.sqlite ".backup backup.sqlite"`), which safely includes WAL contents, on a periodic cron/schedule, and store backups outside the container. This is an operational/deployment concern rather than application code, so V1 documents it here rather than shipping an unrequested backup script — added if/when a real deployment target is chosen (Phase 10).
 
 ## What to do if the API key leaks
 

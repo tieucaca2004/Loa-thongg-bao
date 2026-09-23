@@ -9,6 +9,15 @@ const envSchema = z.object({
   DESKTOP_EVENT_WS_PORT: z.coerce.number().int().positive().default(3001),
   WEBHOOK_BODY_LIMIT_BYTES: z.coerce.number().int().positive().default(1_048_576), // 1MB
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+
+  // Rate limiting for POST /webhooks/sepay only (per source IP). Defaults
+  // are generous relative to SePay's documented retry behavior (up to 8
+  // deliveries per transaction over ~33 minutes, see docs/TECHNICAL_NOTES.md)
+  // so legitimate retries are never blocked; this exists to blunt a flood
+  // of requests (misconfiguration, abuse, or a broken retry loop), not to
+  // rate-limit normal traffic.
+  RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;
