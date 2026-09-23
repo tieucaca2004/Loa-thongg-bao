@@ -37,6 +37,7 @@
     "files": [
       "dist/**/*",
       "!dist/__tests__/**",
+      "!dist/**/*.map",
       "package.json"
     ],
     "win": {
@@ -50,7 +51,8 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "artifactName": "A-Tieu-Payment-Setup.${ext}"
     }
   }
 }
