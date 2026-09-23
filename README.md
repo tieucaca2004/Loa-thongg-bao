@@ -115,24 +115,38 @@ phrase) and **🗣 Test TTS** (speaks a full sample notification). Then send
 a simulated transaction (step 6) and confirm it appears in the app's
 history and is spoken aloud, with a "🔊 Đã phát thông báo" indicator.
 
+## 10. Building the Windows installer (optional, not yet hardware-tested)
+
+```bash
+cd desktop
+npm run dist:win   # builds + packages an NSIS installer via electron-builder
+```
+
+Output lands in `desktop/release/`. This has **not** been run on real
+Windows hardware from this project (developed in a Linux container) — see
+`docs/PRODUCTION_READINESS.md`. No custom application icon is bundled yet;
+add one under `desktop/build-resources/` before a real release.
+
 ## Documentation
 
-- `docs/ARCHITECTURE.md` — system design, data flow, guarantees
+- `docs/ARCHITECTURE.md` — system design, data flow, guarantees, MBBank adapter boundary
 - `docs/SEPAY.md` — SePay integration notes, Test Mode, migration to live MBBank
 - `docs/WEBHOOK.md` — webhook request/response contract, normalized transaction model
 - `docs/TTS.md` — TTS engine, notification formatting, dedupe/retry
-- `docs/SECURITY.md` — secrets, auth, validation, transport
+- `docs/SECURITY.md` — secrets, auth, validation, transport, rate limiting, DB safety
 - `docs/TESTING.md` — test suite index and acceptance-test status
 - `docs/TECHNICAL_NOTES.md` — what's confirmed vs. unverified from SePay's docs
+- `docs/WINDOWS_ACCEPTANCE.md` — manual test plan for real Windows hardware (not yet run)
+- `docs/PRODUCTION_READINESS.md` — go/no-go checklist (currently NOT READY)
 
 ## Project status
 
-Phases 1–8 (repo/architecture, backend skeleton, webhook receiver,
-DB + idempotency, event system, desktop app, TTS, end-to-end Test Mode) are
-implemented and covered by automated tests where the environment allows
-(see `docs/TESTING.md` for the acceptance-test table, including what still
-needs manual verification on a real Windows machine). Phases 9–10
-(security hardening beyond the V1 baseline in `docs/SECURITY.md`, and a
-full production-readiness review) and any move to a live MBBank connection
-are **not** started, per project rule: "KHÔNG chuyển sang MBBank thật cho
-đến khi PHASE 8 PASS."
+Phases 1–9 (repo/architecture, backend skeleton, webhook receiver,
+DB + idempotency, event system, desktop app, TTS, end-to-end Test Mode,
+security hardening) are implemented and covered by automated tests where
+the environment allows (see `docs/TESTING.md`). Phase 10 (production
+readiness) is in progress: the MBBank adapter boundary, packaging config,
+and readiness docs are done, but **real Windows hardware + physical
+speaker have not been tested, and real MBBank has not been connected** —
+see `docs/PRODUCTION_READINESS.md` for exactly what's outstanding. Do not
+treat this project as production-ready until that checklist says so.
