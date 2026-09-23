@@ -1,11 +1,16 @@
 # Windows Hardware Acceptance Test Plan
 
-**Status: NOT YET RUN.** This plan has not been executed on real Windows
-hardware — this project was developed in a Linux cloud container with no
-Windows machine, no physical speaker, and no Electron GUI available. Do
+**Status: NOT YET RUN on real Windows hardware.** This project was
+developed in a Linux cloud container with no Windows machine, no physical
+speaker, and (until Phase 11) no Electron GUI ever launched at all. Do
 not mark any row below as PASS until it has actually been run on the real
 counter machine. See `docs/PRODUCTION_READINESS.md` for the overall
-go/no-go checklist this feeds into.
+go/no-go checklist this feeds into, and
+`docs/WINDOWS_ACCEPTANCE_RESULTS.md` for what Phase 11 *was* able to
+verify by actually running the built app headlessly on Linux (the
+webhook→DB→event→Electron-IPC pipeline, minus the real TTS/speaker hop) —
+including a real preload-loading defect it found and fixed that would
+otherwise have broken the app on Windows too.
 
 ## Prerequisites
 

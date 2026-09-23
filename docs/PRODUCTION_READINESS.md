@@ -8,7 +8,7 @@ simulation, but this checklist's own gate is real-hardware PASS, which is
 still open). States below are factual PASS/FAIL/NOT TESTED only — nothing
 here is upgraded to "ready" without evidence.
 
-Last updated: 2026-09-23 (Phase 10).
+Last updated: 2026-09-23 (Phase 11).
 
 ## Backend
 
@@ -31,28 +31,46 @@ Last updated: 2026-09-23 (Phase 10).
 ## Desktop
 
 - [x] tests PASS — 16/16 (`cd desktop && npm test`)
-- [x] typecheck PASS — `npx tsc --noEmit`
+- [x] typecheck PASS — `npm run typecheck` (now covers both the main
+      process and the separately-compiled preload script, see below)
 - [x] build PASS — `npm run build`
-- [ ] Windows installer PASS — **NOT TESTED**. `npm run dist:win`
-      (electron-builder + NSIS) is configured but has not been run on
-      this Linux dev container (no Windows/wine toolchain available
-      here) and has not been verified to actually install/uninstall
-      cleanly on a real Windows machine. Also: no custom application
-      icon has been supplied yet (electron-builder will fall back to a
-      generic Electron icon) — add one under `build-resources/` before
-      a real release build.
+- [x] **real-app smoke test PASS (Linux, headless)** — Phase 11 launched
+      the actual compiled Electron app under Xvfb and found + fixed a
+      real defect: `preload.ts` was compiled as ESM (package.json
+      `"type": "module"`) but Electron always loads preload scripts as
+      CommonJS, so `window.atieu` was never exposed and the entire
+      renderer UI was non-functional (`Cannot use import statement
+      outside a module`, then `Cannot read properties of undefined`).
+      This would have broken the app **on Windows too**, not just here —
+      no unit test caught it because unit tests never load a real
+      preload script. Fixed via a dedicated CommonJS build step
+      (`tsconfig.preload.json` → `dist/preload.cjs`). After the fix, the
+      real Electron app launched, loaded the renderer, connected to the
+      backend's WebSocket (`desktop client connected` in backend logs),
+      and processed a real simulated `PAYMENT_RECEIVED` event with zero
+      console errors. See `docs/WINDOWS_ACCEPTANCE_RESULTS.md`.
+- [x] electron-builder packaging PASS (Linux) — `electron-builder --win
+      --x64` successfully produces `release/win-unpacked/A Tieu
+      Payment.exe` (correct icon applied, author set, no warnings).
+- [ ] Windows NSIS installer (.exe) PASS — **NOT TESTED**. The final NSIS
+      packaging step requires `wine` on Linux; this container has none
+      and `apt-get install wine64` failed on unrelated package-mirror
+      404s (not a project blocker, an environment one). Must be run
+      either on real Windows or a Linux machine with wine installed.
+      See `docs/WINDOWS_ACCEPTANCE_RESULTS.md`.
 - [ ] Windows SAPI PASS — **NOT TESTED** on real Windows (this container
       cannot run `powershell.exe`/SAPI; `WindowsSapiTtsEngine` falls back
       to a no-op on non-Windows so the rest of the app still runs/tests).
       See `docs/WINDOWS_ACCEPTANCE.md` Test 5.
 - [ ] physical speaker PASS — **NOT TESTED**. See
       `docs/WINDOWS_ACCEPTANCE.md` Test 6.
-- [x] reconnect PASS (code path) — `BackendClient` auto-reconnect with
-      backoff is unit-tested indirectly via its status-transition logic
-      and exercised manually against a real backend process during
-      development; not yet exercised as a full Electron GUI restart on
-      real Windows (`docs/WINDOWS_ACCEPTANCE.md` Tests 8-11 — NOT TESTED
-      on real hardware)
+- [x] reconnect PASS (code path + real headless run) — `BackendClient`
+      auto-reconnect with backoff is unit-tested, and the real Electron
+      app was relaunched multiple times against the same backend during
+      Phase 11, reconnecting cleanly each time (backend log shows
+      repeated connect/disconnect pairs). Not yet exercised as a full
+      installed-app restart on real Windows (`docs/WINDOWS_ACCEPTANCE.md`
+      Tests 8-11 — NOT TESTED on real hardware).
 
 ## Integration
 
@@ -90,8 +108,9 @@ Last updated: 2026-09-23 (Phase 10).
 | Area | Status |
 |---|---|
 | Backend | READY (all automated gates PASS) |
-| Desktop (code/tests) | READY (all automated gates PASS) |
-| Desktop (real hardware) | NOT TESTED |
+| Desktop (code/tests/real-app smoke test) | READY (all automated gates PASS; a real preload-loading defect was found and fixed via an actual Electron run) |
+| Desktop (Windows installer .exe) | NOT TESTED (packaging up to wine-dependent NSIS step PASSES) |
+| Desktop (SAPI/speaker on real hardware) | NOT TESTED |
 | SePay docs | BLOCKED (network egress) |
 | MBBank live connection | NOT CONNECTED (by design, not yet appropriate) |
 | **Overall production readiness** | **NOT READY** |
@@ -106,7 +125,12 @@ Last updated: 2026-09-23 (Phase 10).
    against the real docs.
 2. `docs/WINDOWS_ACCEPTANCE.md` is run in full on a real Windows PC with
    a physical speaker at (or representative of) the actual counter, and
-   every test row is updated to a real PASS/FAIL with evidence.
+   every test row is updated to a real PASS/FAIL with evidence — see
+   `docs/WINDOWS_ACCEPTANCE_RESULTS.md` for what Phase 11 already ran
+   (Linux-only, pipeline-level) versus what still needs real hardware.
+   The NSIS `.exe` installer also needs to be produced (either on real
+   Windows or a Linux machine with `wine`) and tested for clean
+   install/uninstall.
 3. A production deployment target is chosen (hosting for the backend,
    HTTPS termination per `docs/SECURITY.md`) and its own environment
    variables are configured — none of this requires code changes, only

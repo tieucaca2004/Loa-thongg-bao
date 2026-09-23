@@ -115,17 +115,21 @@ phrase) and **🗣 Test TTS** (speaks a full sample notification). Then send
 a simulated transaction (step 6) and confirm it appears in the app's
 history and is spoken aloud, with a "🔊 Đã phát thông báo" indicator.
 
-## 10. Building the Windows installer (optional, not yet hardware-tested)
+## 10. Building the Windows installer
 
 ```bash
 cd desktop
 npm run dist:win   # builds + packages an NSIS installer via electron-builder
 ```
 
-Output lands in `desktop/release/`. This has **not** been run on real
-Windows hardware from this project (developed in a Linux container) — see
-`docs/PRODUCTION_READINESS.md`. No custom application icon is bundled yet;
-add one under `desktop/build-resources/` before a real release.
+Output lands in `desktop/release/`. A branded icon (`desktop/build-resources/icon.ico`)
+and app metadata are already wired in. On Linux/macOS, the final NSIS
+`.exe` step requires `wine` — without it, `electron-builder` still
+successfully produces `desktop/release/win-unpacked/` (the unpacked
+Windows app), just not the installer executable. Building the final
+`.exe` and testing install/uninstall on real Windows hardware is
+**not yet done** from this project — see `docs/WINDOWS_ACCEPTANCE_RESULTS.md`
+and `docs/PRODUCTION_READINESS.md`.
 
 ## Documentation
 
@@ -137,6 +141,7 @@ add one under `desktop/build-resources/` before a real release.
 - `docs/TESTING.md` — test suite index and acceptance-test status
 - `docs/TECHNICAL_NOTES.md` — what's confirmed vs. unverified from SePay's docs
 - `docs/WINDOWS_ACCEPTANCE.md` — manual test plan for real Windows hardware (not yet run)
+- `docs/WINDOWS_ACCEPTANCE_RESULTS.md` — what was actually run (Linux, headless) and its results
 - `docs/PRODUCTION_READINESS.md` — go/no-go checklist (currently NOT READY)
 
 ## Project status
