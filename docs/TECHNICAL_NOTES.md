@@ -8,13 +8,19 @@ ambiguity here instead").
 ## Access constraint
 
 This development container's network egress proxy blocks
-`developer.sepay.vn` and `docs.sepay.vn` directly (`EGRESS_BLOCKED`). All
-information below was gathered via web search snippets that quote or
-summarize those pages, not by fetching the full pages. Anything not
-explicitly quoted in a search result is marked **UNVERIFIED** below and was
-**not** hard-coded into the implementation — instead the code isolates it
-behind an adapter (`backend/src/services/sepay/normalize.ts`) so it can be
-corrected in one place once the docs are reachable.
+`developer.sepay.vn` and `docs.sepay.vn` directly (`EGRESS_BLOCKED`). This
+was re-checked during Phase 10 (2026-09-23) and the block is still in
+effect — both `WebFetch` calls returned `EGRESS_BLOCKED`. To reach these
+hosts, the environment's Network access setting needs `developer.sepay.vn`
+/ `docs.sepay.vn` added to its allowed domains (Environment settings →
+Network access), which requires a human with access to that setting; this
+session cannot change it itself. All information below was gathered via
+web search snippets that quote or summarize those pages, not by fetching
+the full pages. Anything not explicitly quoted in a search result is
+marked **UNVERIFIED** below and was **not** hard-coded into the
+implementation — instead the code isolates it behind an adapter
+(`backend/src/services/sepay/normalize.ts`) so it can be corrected in one
+place once the docs are reachable.
 
 ## Confirmed from search snippets
 
@@ -41,6 +47,23 @@ corrected in one place once the docs are reachable.
   simulated bank account and can trigger simulated transactions from the
   dashboard UI, which fire the same webhook shape to your configured
   endpoint. Test-mode data is isolated from live data/balances.
+- **MBBank support (Phase 10, re-verified via search only)**: SePay
+  officially lists MBBank among the banks it supports for webhook-driven
+  transaction notifications. Linking a bank account for webhooks is done
+  from `my.sepay.vn` → Dashboard → Bank accounts → Add account: pick the
+  bank + account type, enter the account number, then either provide
+  internet-banking login credentials or connect via OAuth (method depends
+  on the bank), after which SePay verifies the link and the account
+  becomes "Active". **Do not attempt this step for V1** — it would require
+  entering real MBBank credentials, which this project must never request
+  or store (see `docs/PRODUCTION_READINESS.md` and project rule 10.3).
+- **A separate "Payment Gateway" product exists** (VietQR / NAPAS / card
+  payments via `my.sepay.vn/pg`), authenticated with HTTP Basic Auth using
+  a `merchant_id:secret_key` pair. **This is a different SePay product
+  from the bank-webhook flow this project integrates with** — V1 uses only
+  the bank-webhook product (`Authorization: Apikey ...`). Do not confuse
+  the two; a future phase that wants VietQR/card payments would need its
+  own adapter and its own credentials, out of scope here.
 
 ## UNVERIFIED — treat as provisional, do not extend without checking docs
 

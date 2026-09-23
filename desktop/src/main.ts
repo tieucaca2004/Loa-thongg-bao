@@ -24,9 +24,17 @@ function createTtsEngine(): TtsEngine {
   return new NullTtsEngine();
 }
 
+/** Applies the autoStart setting to the OS (Windows: registry Run key via Electron's login-item API). */
+function applyAutoStartSetting(autoStart: boolean) {
+  if (process.platform === 'win32') {
+    app.setLoginItemSettings({ openAtLogin: autoStart });
+  }
+}
+
 async function createWindow() {
   settingsPath = join(app.getPath('userData'), 'settings.json');
   settings = loadSettings(settingsPath);
+  applyAutoStartSetting(settings.autoStart);
 
   const ttsEngine = createTtsEngine();
   const history = new TransactionHistoryStore();
@@ -99,17 +107,35 @@ async function createWindow() {
   ipcMain.handle('update-settings', async (_evt, partial: Partial<DesktopSettings>) => {
     settings = { ...settings, ...partial };
     saveSettings(settingsPath, settings);
+    if ('autoStart' in partial) applyAutoStartSetting(settings.autoStart);
     return settings;
   });
 }
 
-app.whenReady().then(() => {
-  void createWindow();
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) void createWindow();
+// Phase 10.5 production check: a second instance at the same counter
+// (double-clicked the shortcut twice, an installer relaunch, etc.) would
+// otherwise open a second WebSocket connection to the backend and speak
+// every transaction twice. requestSingleInstanceLock() makes the second
+// launch quit immediately and focus the first window instead.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
   });
-});
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
+  app.whenReady().then(() => {
+    void createWindow();
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) void createWindow();
+    });
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
+  });
+}

@@ -5,12 +5,15 @@ export interface DesktopSettings {
   backendWsUrl: string;
   voice: string | null;
   volume: number; // 0-100
+  /** Start automatically when Windows logs in (counter machine convenience). Phase 10.5/10.6. */
+  autoStart: boolean;
 }
 
 export const DEFAULT_SETTINGS: DesktopSettings = {
   backendWsUrl: 'ws://localhost:3001',
   voice: null,
   volume: 80,
+  autoStart: false,
 };
 
 /** Loads settings from a JSON file, falling back to defaults if missing/corrupt. */

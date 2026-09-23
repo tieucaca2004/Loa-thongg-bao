@@ -1,7 +1,6 @@
 import type { TransactionRepository, WebhookLogRepository } from '../../db/transactionRepository.js';
 import type { PaymentEventBus } from '../events/eventBus.js';
-import { validateSepayPayload } from '../sepay/schema.js';
-import { normalizeSepayPayload } from '../sepay/normalize.js';
+import type { SePayMBBankAdapter } from '../sepay/SePayMBBankAdapter.js';
 import type { Logger } from '../../lib/logger.js';
 
 export type WebhookOutcome =
@@ -14,6 +13,8 @@ export interface WebhookProcessorDeps {
   webhookLogs: WebhookLogRepository;
   events: PaymentEventBus;
   log: Logger;
+  /** The single boundary that knows SePay/MBBank-specific field names (Phase 10.2). */
+  adapter: SePayMBBankAdapter;
 }
 
 /**
@@ -22,25 +23,25 @@ export interface WebhookProcessorDeps {
  * easy to unit test.
  *
  * Never calls TTS/desktop directly — only publishes an in-process event
- * (see docs/ARCHITECTURE.md).
+ * (see docs/ARCHITECTURE.md). Never touches SePay/MBBank field names
+ * directly — that's isolated behind `adapter` (see docs/ARCHITECTURE.md,
+ * "MBBank adapter").
  */
 export function processSepayWebhook(rawBody: unknown, deps: WebhookProcessorDeps): WebhookOutcome {
-  const { transactions, webhookLogs, events, log } = deps;
+  const { transactions, webhookLogs, events, log, adapter } = deps;
 
-  const validation = validateSepayPayload(rawBody);
-  if (!validation.ok) {
+  const parsed = adapter.parseWebhook(rawBody);
+  if (!parsed.ok) {
     webhookLogs.log({
       outcome: 'rejected_invalid',
-      reason: validation.reason,
+      reason: parsed.reason,
       rawPayload: safeStringify(rawBody),
     });
-    log.warn({ reason: validation.reason }, 'rejected invalid sepay webhook payload');
-    return { status: 'rejected', httpStatus: 400, reason: validation.reason };
+    log.warn({ reason: parsed.reason }, 'rejected invalid sepay webhook payload');
+    return { status: 'rejected', httpStatus: 400, reason: parsed.reason };
   }
 
-  const normalized = normalizeSepayPayload(validation.payload, rawBody);
-
-  const { transaction, duplicate } = transactions.insertIfNew(normalized);
+  const { transaction, duplicate } = transactions.insertIfNew(parsed.transaction);
 
   webhookLogs.log({
     outcome: duplicate ? 'duplicate' : 'accepted',

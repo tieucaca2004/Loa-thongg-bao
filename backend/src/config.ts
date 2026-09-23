@@ -18,6 +18,13 @@ const envSchema = z.object({
   // rate-limit normal traffic.
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+
+  // Comma-separated list of origins allowed to call GET /health and
+  // GET /transactions from a browser (e.g. a future internal dashboard).
+  // Empty (default) disables CORS entirely — safest default, since V1 has
+  // no browser client of its own. POST /webhooks/sepay is server-to-server
+  // (SePay calling us) and is never subject to CORS regardless.
+  ALLOWED_ORIGINS: z.string().default(''),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

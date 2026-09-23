@@ -73,6 +73,41 @@ simply dropped for that moment — the transaction row is already safely
 persisted and visible in `GET /transactions` for reconciliation, so no data
 is lost, only a live notification.
 
+## MBBank adapter (Phase 10.2)
+
+```
+MBBank / SePay
+  ↓ (HTTP POST webhook)
+SePayMBBankAdapter          (backend/src/services/sepay/SePayMBBankAdapter.ts)
+  - verifyWebhookAuth()     — Authorization: Apikey header check
+  - parseWebhook()          — validate + map SePay field names → NormalizedTransaction
+  ↓
+NormalizedTransaction       (backend/src/models/transaction.ts)
+  ↓
+Payment Engine              (processSepayWebhook: idempotency, persist)
+  ↓
+PAYMENT_RECEIVED event
+  ↓
+Desktop
+```
+
+`SePayMBBankAdapter` is the single boundary the rest of the Payment Engine
+depends on for this integration — `processSepayWebhook` and the HTTP route
+never see SePay's raw field names (`transferAmount`, `transferType`, `id`,
+...), only the adapter's `NewTransaction` output. This was already
+structurally true via `schema.ts`/`normalize.ts`/`auth.ts` since Phase 3;
+Phase 10 packaged them behind one named class so the boundary is explicit
+and so a second provider/bank could be added later as its own adapter
+without touching `processSepayWebhook`. No behavior changed — this is a
+pure refactor, verified by the unchanged Phase 1-9 test suite plus a new
+`sePayMBBankAdapter.test.ts`.
+
+**Transaction retrieval**: not implemented, and not needed — SePay's
+bank-webhook product is push-only (SePay calls us), so there is no
+"pull the transaction list" method on the adapter. See
+`docs/TECHNICAL_NOTES.md` for the separate, unrelated SePay "Payment
+Gateway" product (VietQR/cards, Basic Auth) that V1 does not integrate.
+
 ## Idempotency
 
 `transactions.transaction_id` has a SQL `UNIQUE` constraint. Inserts use

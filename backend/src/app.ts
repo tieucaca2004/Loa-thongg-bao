@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import rateLimit from '@fastify/rate-limit';
+import cors from '@fastify/cors';
 import type { AppConfig } from './config.js';
 import type { Logger } from './lib/logger.js';
 import type { DbHandle } from './db/index.js';
@@ -7,7 +8,7 @@ import { checkDatabaseHealth } from './db/index.js';
 import { TransactionRepository, WebhookLogRepository } from './db/transactionRepository.js';
 import { PaymentEventBus } from './services/events/eventBus.js';
 import { processSepayWebhook } from './services/payments/webhookProcessor.js';
-import { verifySepayApiKey } from './services/sepay/auth.js';
+import { SePayMBBankAdapter } from './services/sepay/SePayMBBankAdapter.js';
 
 export interface BuildAppOptions {
   config: AppConfig;
@@ -29,11 +30,21 @@ export function buildApp({ config, log, db, events }: BuildAppOptions) {
 
   const transactions = new TransactionRepository(db);
   const webhookLogs = new WebhookLogRepository(db);
+  const mbbankAdapter = new SePayMBBankAdapter(config.SEPAY_WEBHOOK_API_KEY);
 
   // Global rate-limit plugin registration with `global: false` — it only
   // applies to routes that opt in via `config.rateLimit` (see the webhook
   // route below). /health and /transactions are intentionally unlimited.
   void app.register(rateLimit, { global: false });
+
+  // CORS is off by default (ALLOWED_ORIGINS empty). If configured, it only
+  // ever allows the listed origins to read GET /health / GET /transactions
+  // from a browser (e.g. a future internal dashboard) — POST
+  // /webhooks/sepay is server-to-server and unaffected either way.
+  const allowedOrigins = config.ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean);
+  if (allowedOrigins.length > 0) {
+    void app.register(cors, { origin: allowedOrigins });
+  }
 
   // Centralized error handler so malformed JSON bodies and unexpected
   // internal errors (e.g. a DB failure) always get a controlled,
@@ -101,7 +112,7 @@ export function buildApp({ config, log, db, events }: BuildAppOptions) {
       },
       async (req, reply) => {
         const authHeader = req.headers['authorization'];
-        if (!verifySepayApiKey(authHeader, config.SEPAY_WEBHOOK_API_KEY)) {
+        if (!mbbankAdapter.verifyWebhookAuth(authHeader)) {
           webhookLogs.log({
             outcome: 'rejected_auth',
             reason: 'invalid or missing Authorization header',
@@ -116,7 +127,13 @@ export function buildApp({ config, log, db, events }: BuildAppOptions) {
         // Any unexpected throw here (e.g. the database is unavailable) must
         // never be reported as success — let the centralized error handler
         // above turn it into a controlled 500.
-        const outcome = processSepayWebhook(req.body, { transactions, webhookLogs, events, log });
+        const outcome = processSepayWebhook(req.body, {
+          transactions,
+          webhookLogs,
+          events,
+          log,
+          adapter: mbbankAdapter,
+        });
 
         if (outcome.status === 'rejected') {
           reply.code(outcome.httpStatus);

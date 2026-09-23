@@ -10,7 +10,8 @@
     "build": "tsc -p tsconfig.json && mkdir -p dist/renderer && cp src/renderer/index.html src/renderer/renderer.js dist/renderer/",
     "start": "node dist/main.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "dist:win": "npm run build && electron-builder --win --x64"
   },
   "dependencies": {
     "ws": "^8.18.0"
@@ -19,8 +20,32 @@
     "@types/node": "^20.14.12",
     "@types/ws": "^8.5.12",
     "electron": "^32.1.2",
+    "electron-builder": "^25.1.8",
     "tsx": "^4.19.1",
     "typescript": "^5.5.4",
     "vitest": "^2.1.1"
+  },
+  "build": {
+    "appId": "vn.atieu.payment-desktop",
+    "productName": "A Tieu Payment",
+    "directories": {
+      "output": "release",
+      "buildResources": "build-resources"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }

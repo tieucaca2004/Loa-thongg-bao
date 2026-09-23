@@ -9,6 +9,7 @@ const historyEl = document.getElementById('history');
 const errorsEl = document.getElementById('errors');
 const volumeEl = document.getElementById('volume');
 const voiceEl = document.getElementById('voice');
+const autoStartEl = document.getElementById('auto-start');
 
 const STATUS_LABEL = {
   connected: ['🟢 CONNECTED', 'connected'],
@@ -28,6 +29,7 @@ window.atieu.onConnectionError((message) => {
 
 window.atieu.onSettings((settings) => {
   volumeEl.value = settings.volume;
+  autoStartEl.checked = !!settings.autoStart;
   window.atieu.listVoices().then((voices) => {
     voiceEl.innerHTML = '';
     for (const v of voices) {
@@ -94,4 +96,8 @@ volumeEl.addEventListener('change', () => {
 
 voiceEl.addEventListener('change', () => {
   window.atieu.updateSettings({ voice: voiceEl.value });
+});
+
+autoStartEl.addEventListener('change', () => {
+  window.atieu.updateSettings({ autoStart: autoStartEl.checked });
 });
