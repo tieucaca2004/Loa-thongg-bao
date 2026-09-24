@@ -5,6 +5,8 @@ import { BackendClient, type ConnectionStatus, type PaymentReceivedEvent } from 
 import { TransactionHistoryStore } from './state/TransactionHistoryStore.js';
 import { AnnouncementQueue } from './tts/AnnouncementQueue.js';
 import { WindowsSapiTtsEngine, NullTtsEngine, type TtsEngine } from './tts/TtsEngine.js';
+import { WindowsOneCoreTtsEngine } from './tts/WindowsOneCoreTtsEngine.js';
+import { WindowsTtsRouter } from './tts/WindowsTtsRouter.js';
 import { loadSettings, saveSettings, type DesktopSettings } from './settings.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -20,7 +22,19 @@ function send(channel: string, payload: unknown) {
 function createTtsEngine(): TtsEngine {
   // Windows SAPI via PowerShell (project spec #8: TTS runs local on the counter machine).
   // Falls back to a no-op engine on non-Windows dev machines so the app still runs.
-  if (process.platform === 'win32') return new WindowsSapiTtsEngine();
+  //
+  // Phase 13D-R4: on win32, route through WindowsTtsRouter instead of using
+  // WindowsSapiTtsEngine directly, so a OneCore-only voice (e.g. "Microsoft
+  // An - Vietnamese (Vietnam)") can also be selected and spoken. Classic
+  // SAPI (System.Speech) never enumerates OneCore-registered voices -
+  // they live under a different registry hive - so a second, separate
+  // engine (WindowsOneCoreTtsEngine) is needed. WindowsSapiTtsEngine itself
+  // is unchanged and remains the sole handler for classic SAPI voices; this
+  // only adds that second, isolated engine and a name-based dispatcher in
+  // front of both. See WindowsTtsRouter.ts / WindowsOneCoreTtsEngine.ts.
+  if (process.platform === 'win32') {
+    return new WindowsTtsRouter(new WindowsSapiTtsEngine(), new WindowsOneCoreTtsEngine());
+  }
   return new NullTtsEngine();
 }
 

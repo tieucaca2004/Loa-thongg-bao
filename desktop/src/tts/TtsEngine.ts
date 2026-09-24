@@ -42,9 +42,12 @@ export class WindowsSapiTtsEngine implements TtsEngine {
   }
 }
 
-type ExecFn = (command: string, args: string[]) => Promise<string>;
+// Exported (Phase 13D-R4): pure visibility change so WindowsOneCoreTtsEngine
+// can reuse the exact same child-process wrapper instead of duplicating it.
+// No behavior of WindowsSapiTtsEngine below is altered by this export.
+export type ExecFn = (command: string, args: string[]) => Promise<string>;
 
-async function defaultExec(command: string, args: string[]): Promise<string> {
+export async function defaultExec(command: string, args: string[]): Promise<string> {
   const { execFile } = await import('node:child_process');
   return new Promise((resolve, reject) => {
     execFile(command, args, (err, stdout, stderr) => {
