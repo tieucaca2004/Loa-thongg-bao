@@ -3,8 +3,13 @@ import { defaultExec } from './TtsEngine.js';
 
 /** Enriched voice info, beyond the bare-string `TtsEngine.listVoices()` contract. */
 export interface OneCoreVoiceInfo {
+  /** WinRT `VoiceInformation.DisplayName`, e.g. "Microsoft An". */
   displayName: string;
+  /** WinRT `VoiceInformation.Language` (BCP-47), e.g. "vi-VN". */
   language: string;
+  /** WinRT `VoiceInformation.Description`, e.g. "Microsoft An - Vietnamese (Vietnam)". */
+  description: string;
+  /** WinRT `VoiceInformation.Id` (OneCore registry token path). */
   id: string;
 }
 
@@ -25,8 +30,18 @@ export interface OneCoreVoiceInfo {
  * `Windows.Media.SpeechSynthesis.SpeechSynthesizer` — the same "shell out,
  * no new npm/native dependency" shape `WindowsSapiTtsEngine` already uses,
  * so packaging, admin requirements, and the Electron/Node runtime are
- * unaffected. Requires Windows 10+; not verified in this session (no
- * Windows machine here) — real-hardware verification is a separate phase.
+ * unaffected. Requires Windows 10+.
+ *
+ * Phase 13D-R6 (from native Windows 10 verification in R5):
+ *  - `SpeechSynthesizer.AllVoices` is a STATIC WinRT property. Reading it
+ *    from an instance (`$synth.AllVoices`) silently yields `$null` in
+ *    PowerShell, so both scripts read `[...SpeechSynthesizer]::AllVoices`.
+ *  - WinRT reports `DisplayName` "Microsoft An" and `Description`
+ *    "Microsoft An - Vietnamese (Vietnam)" (language vi-VN). `listVoices()`
+ *    exposes the Description (the name Windows Settings shows, and what
+ *    `WindowsTtsRouter` routes on); `speak()` accepts a voice by exact Id,
+ *    Description or DisplayName, and verifies the synthesizer really
+ *    switched to that voice — never falling back to the default voice.
  *
  * Unlike classic SAPI's `Speak()` (synthesizes AND plays in one blocking
  * call), WinRT `SynthesizeTextToStreamAsync()` only synthesizes — it
@@ -41,13 +56,19 @@ export interface OneCoreVoiceInfo {
 export class WindowsOneCoreTtsEngine implements TtsEngine {
   constructor(private readonly execFn: ExecFn = defaultExec) {}
 
-  /** Bare display names, matching the `TtsEngine.listVoices()` contract exactly. */
+  /**
+   * Voice names for the `TtsEngine.listVoices()` contract: the WinRT
+   * Description (e.g. "Microsoft An - Vietnamese (Vietnam)"), falling back
+   * to DisplayName if a voice has no Description. The Description embeds the
+   * language, so the OneCore voices stay distinct from classic SAPI names
+   * ("Microsoft David Desktop") and are self-describing in the voice picker.
+   */
   async listVoices(): Promise<string[]> {
     const voices = await this.listVoiceDetails();
-    return voices.map((v) => v.displayName);
+    return voices.map((v) => v.description || v.displayName);
   }
 
-  /** Enriched enumeration (display name, BCP-47 language, stable id) for future callers. */
+  /** Enriched enumeration (display name, BCP-47 language, description, stable id). */
   async listVoiceDetails(): Promise<OneCoreVoiceInfo[]> {
     const output = await this.execFn('powershell', ['-NoProfile', '-Command', buildOneCoreListVoicesScript()]);
     return parseVoiceListOutput(output);
@@ -77,12 +98,18 @@ function escapeForSingleQuotedPs(value: string): string {
   return value.replace(/[\r\n]+/g, ' ').replace(/'/g, "''");
 }
 
+/**
+ * Static WinRT property access. `AllVoices` is static on SpeechSynthesizer;
+ * `$synth.AllVoices` on an instance evaluates to `$null` without any error
+ * (the Phase 13D-R5 defect), so it must always be read through the type.
+ */
+export const ONECORE_ALL_VOICES = '[Windows.Media.SpeechSynthesis.SpeechSynthesizer]::AllVoices';
+
 export function buildOneCoreListVoicesScript(): string {
   return [
     'Add-Type -AssemblyName System.Runtime.WindowsRuntime;',
     '[Windows.Media.SpeechSynthesis.SpeechSynthesizer,Windows.Media.SpeechSynthesis,ContentType=WindowsRuntime] | Out-Null;',
-    '$synth = New-Object Windows.Media.SpeechSynthesis.SpeechSynthesizer;',
-    'foreach ($v in $synth.AllVoices) { Write-Output ($v.DisplayName + \'|\' + $v.Language + \'|\' + $v.Id) }',
+    `foreach ($v in ${ONECORE_ALL_VOICES}) { Write-Output ($v.DisplayName + '|' + $v.Language + '|' + $v.Description + '|' + $v.Id) }`,
   ].join(' ');
 }
 
@@ -93,12 +120,22 @@ export function buildOneCoreSpeakScript(
   const escapedText = escapeForSingleQuotedPs(text);
   const volume16 = Math.round((options.volumePercent / 100) * 65535);
 
+  // Exact match only, in priority order Id -> Description -> DisplayName
+  // (e.g. "Microsoft An - Vietnamese (Vietnam)" or "Microsoft An"). No
+  // partial/fuzzy match and no default-voice fallback: an unknown name
+  // throws, so a Vietnamese request can never be spoken by an English voice.
+  // After assignment the synthesizer's actual voice Id is re-checked.
   const voiceSelection = options.voiceName
     ? [
-        `$targetVoice = $synth.AllVoices | Where-Object { $_.DisplayName -eq '${escapeForSingleQuotedPs(options.voiceName)}' } | Select-Object -First 1;`,
-        'if ($targetVoice) { $synth.Voice = $targetVoice } else { throw "OneCore voice not found: ' +
-          escapeForSingleQuotedPs(options.voiceName) +
-          '" };',
+        `$requestedVoice = '${escapeForSingleQuotedPs(options.voiceName)}';`,
+        `$allVoices = @(${ONECORE_ALL_VOICES});`,
+        '$targetVoice = $allVoices | Where-Object { $_.Id -eq $requestedVoice } | Select-Object -First 1;',
+        'if (-not $targetVoice) { $targetVoice = $allVoices | Where-Object { $_.Description -eq $requestedVoice } | Select-Object -First 1 };',
+        'if (-not $targetVoice) { $targetVoice = $allVoices | Where-Object { $_.DisplayName -eq $requestedVoice } | Select-Object -First 1 };',
+        "if (-not $targetVoice) { throw ('OneCore voice not found: ' + $requestedVoice) };",
+        '$synth.Voice = $targetVoice;',
+        "if ($synth.Voice.Id -ne $targetVoice.Id) { throw ('OneCore voice selection failed: ' + $requestedVoice) };",
+        "Write-Output ('ONECORE_VOICE|' + $synth.Voice.DisplayName + '|' + $synth.Voice.Language + '|' + $synth.Voice.Id);",
       ].join(' ')
     : '';
 
@@ -148,11 +185,13 @@ function parseVoiceListOutput(output: string): OneCoreVoiceInfo[] {
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .map((line) => {
+      // DisplayName|Language|Description|Id — Id last so any '|' in it survives.
       const parts = line.split('|');
       const displayName = parts[0] ?? '';
       const language = parts[1] ?? '';
-      const id = parts.length > 2 ? parts.slice(2).join('|') : '';
-      return { displayName, language, id };
+      const description = parts[2] ?? '';
+      const id = parts.length > 3 ? parts.slice(3).join('|') : '';
+      return { displayName, language, description, id };
     })
     .filter((v) => v.displayName.length > 0);
 }
