@@ -30,14 +30,29 @@ place once the docs are reachable.
   `accountNumber`, `code`, `content`, `transferType` (`"in"` | `"out"`),
   `transferAmount`, `accumulated`, `subAccount`, `referenceCode`,
   `description`.
-- **Authentication**: SePay supports an API Key mode, sending header
-  `Authorization: Apikey YOUR_API_KEY`, and optionally OAuth2 or no auth,
-  depending on how the webhook is configured in the dashboard.
-- **Success/retry semantics**: SePay retries when the response is outside
-  the 2xx range or the connection fails; retry backoff follows a
-  Fibonacci-like increasing interval, up to 8 total attempts (1 initial +
-  7 retries) over roughly 33 minutes, after which the webhook is marked
-  "Failed".
+- **Authentication**: SePay offers HMAC-SHA256, API Key, OAuth 2.0 or no
+  auth, chosen per webhook in the dashboard. This project uses **API Key**
+  only: header `Authorization: Apikey YOUR_API_KEY`.
+- **Success/retry semantics** (re-verified 2026-09-25 against
+  `docs.sepay.vn/tich-hop-webhooks.html`, Phase 13E): a delivery counts as
+  successful only if the endpoint answers HTTP `200` or `201` with JSON
+  body `{"success": true}` within 30 seconds (5-second connect timeout).
+  Otherwise SePay retries up to 7 times (8 deliveries total) at
+  Fibonacci-spaced intervals, for at most 5 hours from the first failure.
+  This implementation answers `200 {"success": true, ...}`, including for
+  duplicates, so a retried delivery stops the retry chain.
+- **Payload sample** (same page): `id` is a number (e.g. `92704`),
+  `transactionDate` is `"YYYY-MM-DD HH:MM:SS"`, `transferAmount` and
+  `accumulated` are numbers in VND, `subAccount` may be `""`.
+- **Direction**: `transferType` is `"in"` or `"out"`; the webhook can be
+  set to fire for money-in only, money-out only, or both. The Payment
+  Engine persists both but only publishes `PAYMENT_RECEIVED` for `"in"`
+  (Phase 13E), so an outgoing transfer is never announced.
+- **Source IPs** SePay publishes for webhook delivery (for an optional
+  allowlist, e.g. a Cloudflare WAF rule): IPv4 172.236.138.20,
+  172.233.83.68, 171.244.35.2, 151.158.108.68, 151.158.109.79,
+  103.255.238.139, 45.57.137.67; IPv6 2400:8905::2000:8cff:fe98:45cd,
+  2600:3c15::2000:8aff:fedd:874b.
 - **Idempotency guidance**: SePay's own docs recommend deduplicating on the
   `id` field, optionally combined with `referenceCode` + `transferType` +
   `transferAmount`.
@@ -67,16 +82,9 @@ place once the docs are reachable.
 
 ## UNVERIFIED — treat as provisional, do not extend without checking docs
 
-- The exact JSON casing/nesting for `id` (numeric vs string) and whether it
-  is called `id` or `gateway_id` was not confirmed via a quoted payload
-  sample.
-- Whether SePay signs the payload body (HMAC signature header) in addition
-  to the API-key header was not confirmed. **This implementation assumes
-  API-key header auth only** (`Authorization: Apikey <key>` compared with
-  `crypto.timingSafeEqual` against `SEPAY_WEBHOOK_API_KEY`), and does not
-  implement HMAC verification. Revisit once the docs are reachable.
-- Exact success response body SePay expects is unconfirmed beyond "2xx".
-  This implementation returns `200 { "success": true }`.
+- HMAC-SHA256 is a separate auth mode (not an addition to API Key). Its
+  header/signature format was not reviewed; this implementation supports
+  API Key only, so the SePay webhook must be configured with API Key.
 - Whether `code` is a bank-provided transaction code distinct from `id`,
   and which field is guaranteed globally unique, is unconfirmed. This
   implementation uses `id` (aliased in our normalized model as

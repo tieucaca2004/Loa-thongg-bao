@@ -12,7 +12,7 @@ const envSchema = z.object({
 
   // Rate limiting for POST /webhooks/sepay only (per source IP). Defaults
   // are generous relative to SePay's documented retry behavior (up to 8
-  // deliveries per transaction over ~33 minutes, see docs/TECHNICAL_NOTES.md)
+  // deliveries per transaction over up to 5 hours, see docs/TECHNICAL_NOTES.md)
   // so legitimate retries are never blocked; this exists to blunt a flood
   // of requests (misconfiguration, abuse, or a broken retry loop), not to
   // rate-limit normal traffic.

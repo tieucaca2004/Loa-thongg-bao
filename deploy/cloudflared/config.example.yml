@@ -1,0 +1,25 @@
+# Cloudflare Tunnel (locally-managed named tunnel) for the SePay webhook.
+#
+# Copy to config.yml (gitignored) and fill in the placeholders. Keep the
+# credentials JSON OUTSIDE this repo (default: %USERPROFILE%\.cloudflared\).
+#
+# Exposes ONLY POST /webhooks/sepay over HTTPS. Everything else - /health,
+# /transactions, and the desktop WebSocket (DESKTOP_EVENT_WS_PORT, 3001) -
+# gets a 404 at Cloudflare and never reaches the backend.
+#
+# Ingress rules cannot match on HTTP method; the backend only defines POST on
+# this path, so any other method is rejected there.
+#
+# Check before running:
+#   cloudflared tunnel --config config.yml ingress validate
+#   cloudflared tunnel --config config.yml ingress rule https://<WEBHOOK_HOSTNAME>/webhooks/sepay
+#   cloudflared tunnel --config config.yml ingress rule https://<WEBHOOK_HOSTNAME>/transactions
+
+tunnel: <TUNNEL_UUID>
+credentials-file: C:\Users\<WINDOWS_USER>\.cloudflared\<TUNNEL_UUID>.json
+
+ingress:
+  - hostname: <WEBHOOK_HOSTNAME>
+    path: ^/webhooks/sepay$
+    service: http://127.0.0.1:3000
+  - service: http_status:404

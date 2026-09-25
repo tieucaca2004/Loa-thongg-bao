@@ -19,7 +19,8 @@ export interface WebhookProcessorDeps {
 
 /**
  * Full webhook pipeline: validate -> normalize -> idempotency check ->
- * persist -> publish event. Kept independent of the HTTP framework so it's
+ * persist -> publish event (incoming "in" transactions only; "out" is
+ * persisted but never published). Kept independent of the HTTP framework so it's
  * easy to unit test.
  *
  * Never calls TTS/desktop directly — only publishes an in-process event
@@ -55,9 +56,21 @@ export function processSepayWebhook(rawBody: unknown, deps: WebhookProcessorDeps
   }
 
   log.info(
-    { transactionId: transaction.transactionId, amount: transaction.amount, gateway: transaction.gateway },
+    {
+      transactionId: transaction.transactionId,
+      amount: transaction.amount,
+      gateway: transaction.gateway,
+      transactionType: transaction.transactionType,
+    },
     'transaction persisted'
   );
+
+  // Only incoming money is a "payment received". Outgoing transfers
+  // (transferType "out") are still persisted above for audit, but must never
+  // reach the desktop, which would otherwise announce them as "Đã nhận ...".
+  if (transaction.transactionType !== 'in') {
+    return { status: 'accepted', transactionId: transaction.transactionId, duplicate: false };
+  }
 
   events.publish({
     type: 'PAYMENT_RECEIVED',

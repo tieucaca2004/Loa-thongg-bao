@@ -162,6 +162,80 @@ describe('POST /webhooks/sepay', () => {
     expect(received).toHaveLength(1);
     expect(received[0].transactionId).toBe('dup-tx-1');
   });
+
+  it('stores an outgoing (transferType "out") transaction but never publishes PAYMENT_RECEIVED', async () => {
+    const received: PaymentReceivedEvent[] = [];
+    events.subscribe((e) => received.push(e));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/sepay',
+      headers: { authorization: `Apikey ${API_KEY}` },
+      payload: validPayload({ id: 'out-tx-1', transferType: 'out', transferAmount: 500000 }),
+    });
+
+    // Still a success for SePay, so it does not retry.
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ success: true, transactionId: 'out-tx-1', duplicate: false });
+
+    const row = db.prepare('SELECT * FROM transactions WHERE transaction_id = ?').get('out-tx-1') as
+      | { amount: number; transaction_type: string }
+      | undefined;
+    expect(row?.transaction_type).toBe('out');
+    expect(row?.amount).toBe(500000);
+
+    expect(received).toHaveLength(0);
+  });
+
+  it('stays idempotent for outgoing transactions: repeats are duplicates, one row, no event', async () => {
+    const received: PaymentReceivedEvent[] = [];
+    events.subscribe((e) => received.push(e));
+
+    const payload = validPayload({ id: 'out-dup-1', transferType: 'out' });
+    const bodies = [];
+    for (let i = 0; i < 3; i++) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/webhooks/sepay',
+        headers: { authorization: `Apikey ${API_KEY}` },
+        payload,
+      });
+      expect(res.statusCode).toBe(200);
+      bodies.push(res.json().duplicate);
+    }
+
+    expect(bodies).toEqual([false, true, true]);
+    const count = db.prepare("SELECT COUNT(*) as c FROM transactions WHERE transaction_id = 'out-dup-1'").get() as {
+      c: number;
+    };
+    expect(count.c).toBe(1);
+    expect(received).toHaveLength(0);
+  });
+
+  it('publishes only the incoming transactions from a mixed in/out sequence, in order', async () => {
+    const received: PaymentReceivedEvent[] = [];
+    events.subscribe((e) => received.push(e));
+
+    const sequence = [
+      { id: 'mix-1', transferType: 'in' },
+      { id: 'mix-2', transferType: 'out' },
+      { id: 'mix-3', transferType: 'in' },
+      { id: 'mix-4', transferType: 'out' },
+    ];
+    for (const tx of sequence) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/webhooks/sepay',
+        headers: { authorization: `Apikey ${API_KEY}` },
+        payload: validPayload(tx),
+      });
+      expect(res.statusCode).toBe(200);
+    }
+
+    const count = db.prepare('SELECT COUNT(*) as c FROM transactions').get() as { c: number };
+    expect(count.c).toBe(4);
+    expect(received.map((e) => e.transactionId)).toEqual(['mix-1', 'mix-3']);
+  });
 });
 
 describe('GET /health', () => {

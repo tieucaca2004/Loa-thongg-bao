@@ -12,3 +12,5 @@ coverage/
 .DS_Store
 release/
 dist-preload/
+deploy/cloudflared/config.yml
+deploy/cloudflared/*.json
