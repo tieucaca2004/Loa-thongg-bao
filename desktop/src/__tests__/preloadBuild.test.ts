@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { execFileSync } from 'node:child_process';
+import { execSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,7 +25,9 @@ describe('Phase 12: preload build regression guard', () => {
     'produces dist/preload.cjs as CommonJS, and never dist/preload.js',
     () => {
       rmSync(DIST, { recursive: true, force: true });
-      execFileSync('npm', ['run', 'build'], { cwd: DESKTOP_ROOT, stdio: 'pipe' });
+      // Via the platform shell: on Windows `npm` is an `npm.cmd` shim that
+      // execFileSync cannot resolve (ENOENT) or spawn without a shell (EINVAL).
+      execSync('npm run build', { cwd: DESKTOP_ROOT, stdio: 'pipe' });
 
       const preloadCjs = join(DIST, 'preload.cjs');
       const preloadJs = join(DIST, 'preload.js');
